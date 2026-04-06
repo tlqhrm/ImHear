@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ImHear — Auto-pause media when someone talks</title>
+<style>
+  :root { --bg: #0d1117; --card: #161b22; --text: #e6edf3; --dim: #8b949e; --accent: #58a6ff; --green: #3fb950; --border: #30363d; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', 'Helvetica Neue', sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+
+  .hero { text-align: center; padding: 80px 20px 40px; }
+  .hero h1 { font-size: 3rem; font-weight: 700; margin-bottom: 8px; }
+  .hero h1 span { font-size: 3.2rem; margin-right: 8px; }
+  .hero .tagline { font-size: 1.2rem; color: var(--dim); margin-bottom: 32px; }
+
+  .download-btn {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: var(--green); color: #fff; text-decoration: none;
+    padding: 14px 32px; border-radius: 8px; font-size: 1.1rem; font-weight: 600;
+    transition: opacity .2s;
+  }
+  .download-btn:hover { opacity: 0.85; }
+  .download-btn svg { width: 20px; height: 20px; fill: currentColor; }
+  .meta { margin-top: 12px; font-size: 0.85rem; color: var(--dim); }
+  .meta a { color: var(--accent); text-decoration: none; }
+
+  /* screenshot placeholder */
+  .screenshot { text-align: center; padding: 20px 20px 60px; }
+  .screenshot img { max-width: 480px; width: 100%; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+  .screenshot .placeholder {
+    display: inline-block; width: 100%; max-width: 480px; height: 260px;
+    border: 2px dashed var(--border); border-radius: 12px;
+    line-height: 260px; color: var(--dim); font-size: 0.9rem;
+  }
+
+  .features { max-width: 720px; margin: 0 auto; padding: 0 20px 60px; }
+  .features h2 { font-size: 1.6rem; margin-bottom: 24px; text-align: center; }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px;
+  }
+  .card .icon { font-size: 1.5rem; margin-bottom: 8px; }
+  .card h3 { font-size: 1rem; margin-bottom: 6px; }
+  .card p { font-size: 0.88rem; color: var(--dim); line-height: 1.5; }
+
+  .req { max-width: 720px; margin: 0 auto; padding: 0 20px 60px; text-align: center; }
+  .req h2 { font-size: 1.3rem; margin-bottom: 12px; }
+  .req p { color: var(--dim); font-size: 0.9rem; }
+
+  footer { text-align: center; padding: 30px 20px; border-top: 1px solid var(--border); color: var(--dim); font-size: 0.8rem; }
+  footer a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1><span>&#x1F442;</span>ImHear</h1>
+  <p class="tagline">Auto-pause your media when someone talks to you.</p>
+  <a class="download-btn" href="https://github.com/a159x36/ImHear/releases/latest">
+    <svg viewBox="0 0 16 16"><path d="M2.75 14A1.75 1.75 0 0 1 1 12.25v-2.5a.75.75 0 0 1 1.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 0 0 .25-.25v-2.5a.75.75 0 0 1 1.5 0v2.5A1.75 1.75 0 0 1 13.25 14ZM7.25 7.689V2a.75.75 0 0 1 1.5 0v5.689l1.97-1.969a.749.749 0 1 1 1.06 1.06l-3.25 3.25a.749.749 0 0 1-1.06 0L4.22 6.78a.749.749 0 1 1 1.06-1.06l1.97 1.969Z"/></svg>
+    Download for macOS
+  </a>
+  <p class="meta">
+    macOS 14+ &middot; Apple Silicon & Intel &middot; ~1MB<br>
+    <a href="https://github.com/a159x36/ImHear">View on GitHub</a>
+  </p>
+</div>
+
+<div class="screenshot">
+  <!-- TODO: Replace with actual screenshot -->
+  <div class="placeholder">Screenshot coming soon</div>
+  <!-- <img src="screenshot.png" alt="ImHear screenshot"> -->
+</div>
+
+<div class="features">
+  <h2>Features</h2>
+  <div class="grid">
+    <div class="card">
+      <div class="icon">&#x1F399;</div>
+      <h3>Speech Detection</h3>
+      <p>Uses Apple's SoundAnalysis to detect human speech from your microphone in real-time.</p>
+    </div>
+    <div class="card">
+      <div class="icon">&#x23F8;</div>
+      <h3>Auto Pause & Resume</h3>
+      <p>Pauses your music/podcast when speech is detected. Resumes automatically after a configurable delay.</p>
+    </div>
+    <div class="card">
+      <div class="icon">&#x1F509;</div>
+      <h3>Volume Duck</h3>
+      <p>Alternatively lower the system volume instead of pausing — great for background music.</p>
+    </div>
+    <div class="card">
+      <div class="icon">&#x1F4CA;</div>
+      <h3>Live Meter</h3>
+      <p>Real-time status bar visualization showing speech and volume levels with threshold indicator.</p>
+    </div>
+    <div class="card">
+      <div class="icon">&#x2699;</div>
+      <h3>Fully Configurable</h3>
+      <p>Adjust speech sensitivity, volume gate, resume delay, target volume, and more.</p>
+    </div>
+    <div class="card">
+      <div class="icon">&#x1F504;</div>
+      <h3>Auto Update</h3>
+      <p>Checks GitHub for new releases and updates itself with one click.</p>
+    </div>
+  </div>
+</div>
+
+<div class="req">
+  <h2>Requirements</h2>
+  <p>macOS 14 Sonoma or later &middot; Microphone permission &middot; Accessibility permission</p>
+</div>
+
+<footer>
+  <p>Made with care &middot; <a href="https://github.com/a159x36/ImHear">GitHub</a> &middot; MIT License</p>
+</footer>
+
+</body>
+</html>

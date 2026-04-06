@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(swift build:*)",
+      "Bash(bash build.sh 2>&1)",
+      "Bash(ls -t ~/Library/Logs/DiagnosticReports/ImHear* 2>/dev/null | head -5)",
+      "Bash(ls -t ~/Library/Logs/DiagnosticReports/ImHear* 2>/dev/null | head -3)"
+    ]
+  }
+}
