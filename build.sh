@@ -55,21 +55,34 @@ cat > /tmp/ImHear.entitlements << 'ENT'
 </plist>
 ENT
 
-echo "🔏 Signing..."
-codesign --force --deep --sign - --entitlements /tmp/ImHear.entitlements "$APP_DIR"
-
-echo ""
-echo "✅ Done! → $APP_DIR"
-echo ""
-echo "🚀 open $APP_DIR"
-echo ""
-echo "⚠️  First launch: Microphone + Accessibility permission required"
-
-# Create release zip if --release flag is passed
 if [[ "$1" == "--release" ]]; then
+    SIGN_IDENTITY="CA2754626BC60B9C14EB5D1309916BE3997C859C"
+    echo "🔏 Signing with Developer ID..."
+    codesign --force --deep --options runtime --sign "$SIGN_IDENTITY" --entitlements /tmp/ImHear.entitlements "$APP_DIR"
+
     ZIP_PATH="$(pwd)/ImHear.zip"
     rm -f "$ZIP_PATH"
-    cd "$HOME/Applications" && zip -r "$ZIP_PATH" ImHear.app
+    ditto -c -k --keepParent "$APP_DIR" "$ZIP_PATH"
+
+    echo "📤 Submitting for notarization..."
+    SUBMIT_OUT=$(xcrun notarytool submit "$ZIP_PATH" --keychain-profile "ImHear-Notary" 2>&1)
+    echo "$SUBMIT_OUT"
+    SUBMISSION_ID=$(echo "$SUBMIT_OUT" | grep "id:" | head -1 | awk '{print $2}')
+
     echo ""
-    echo "📦 Release archive: $ZIP_PATH"
+    echo "⏳ Notarization submitted! Check status with:"
+    echo "   xcrun notarytool info $SUBMISSION_ID --keychain-profile \"ImHear-Notary\""
+    echo ""
+    echo "When status is 'Accepted', run:"
+    echo "   xcrun stapler staple \"$APP_DIR\" && rm -f \"$ZIP_PATH\" && ditto -c -k --keepParent \"$APP_DIR\" \"$ZIP_PATH\""
+    echo ""
+    echo "📦 Release archive (pre-staple): $ZIP_PATH"
+else
+    echo "🔏 Signing (ad-hoc)..."
+    codesign --force --deep --sign - --entitlements /tmp/ImHear.entitlements "$APP_DIR"
+
+    echo ""
+    echo "✅ Done! → $APP_DIR"
+    echo "🚀 open $APP_DIR"
+    echo "⚠️  First launch: Microphone + Accessibility permission required"
 fi

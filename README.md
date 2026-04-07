@@ -2,8 +2,7 @@
 
 A lightweight macOS menu bar app that detects nearby speech and automatically pauses or lowers your media volume.
 
-<!-- TODO: Add screenshot here -->
-<!-- ![ImHear Screenshot](docs/screenshot.png) -->
+![ImHear Screenshot](docs/screenshot.png)
 
 ## Features
 
@@ -28,7 +27,7 @@ A lightweight macOS menu bar app that detects nearby speech and automatically pa
 
 ### Download
 
-Download the latest release from the [Releases page](https://github.com/a159x36/ImHear/releases/latest).
+Download the latest release from the [Releases page](https://github.com/tlqhrm/ImHear/releases/latest).
 
 1. Unzip `ImHear.zip`
 2. Move `ImHear.app` to `~/Applications` or `/Applications`
@@ -37,7 +36,7 @@ Download the latest release from the [Releases page](https://github.com/a159x36/
 ### Build from Source
 
 ```bash
-git clone https://github.com/a159x36/ImHear.git
+git clone https://github.com/tlqhrm/ImHear.git
 cd ImHear
 bash build.sh
 ```
@@ -54,15 +53,6 @@ ImHear lives in your menu bar. Click the ear icon to open settings:
 - **Detection** — Adjust speech sensitivity and volume threshold
 - **Auto Resume** — Set delay before media resumes
 - **Options** — Toggle status bar meter, launch at login
-
-### Status Bar Icon
-
-| Icon | State |
-|------|-------|
-| Ear (default) | Listening, no speech |
-| Ear + waveform (orange) | Speech detected |
-| Ear (yellow) | Media paused/lowered, waiting to resume |
-| Ear (dim) | Detection disabled |
 
 ## How It Works
 

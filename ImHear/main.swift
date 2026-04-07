@@ -6,7 +6,7 @@ import CoreAudio
 import ServiceManagement
 
 let kAppVersion = "1.0.0"
-let kGitHubRepo = "a159x36/ImHear"
+let kGitHubRepo = "tlqhrm/ImHear"
 
 // ═══════════════════════════════════════════════════════════
 // MARK: - System Helpers
