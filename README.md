@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="icon.png" width="128" alt="ImHear icon">
+</p>
+
 # ImHear
 
 A lightweight macOS menu bar app that detects nearby speech and automatically pauses or lowers your media volume.
