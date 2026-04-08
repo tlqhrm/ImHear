@@ -15,20 +15,20 @@ cp .build/release/ImHear "$MACOS_DIR/"
 
 # Generate .icns from icon.png
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-if [ -f "$SCRIPT_DIR/icon.png" ]; then
+if [ -f "$SCRIPT_DIR/docs/icon.png" ]; then
     echo "🎨 Generating app icon..."
     ICONSET="$SCRIPT_DIR/.build/ImHear.iconset"
     mkdir -p "$ICONSET"
-    sips -z 16 16     "$SCRIPT_DIR/icon.png" --out "$ICONSET/icon_16x16.png"      > /dev/null
-    sips -z 32 32     "$SCRIPT_DIR/icon.png" --out "$ICONSET/icon_16x16@2x.png"   > /dev/null
-    sips -z 32 32     "$SCRIPT_DIR/icon.png" --out "$ICONSET/icon_32x32.png"      > /dev/null
-    sips -z 64 64     "$SCRIPT_DIR/icon.png" --out "$ICONSET/icon_32x32@2x.png"   > /dev/null
-    sips -z 128 128   "$SCRIPT_DIR/icon.png" --out "$ICONSET/icon_128x128.png"    > /dev/null
-    sips -z 256 256   "$SCRIPT_DIR/icon.png" --out "$ICONSET/icon_128x128@2x.png" > /dev/null
-    sips -z 256 256   "$SCRIPT_DIR/icon.png" --out "$ICONSET/icon_256x256.png"    > /dev/null
-    sips -z 512 512   "$SCRIPT_DIR/icon.png" --out "$ICONSET/icon_256x256@2x.png" > /dev/null
-    sips -z 512 512   "$SCRIPT_DIR/icon.png" --out "$ICONSET/icon_512x512.png"    > /dev/null
-    sips -z 1024 1024 "$SCRIPT_DIR/icon.png" --out "$ICONSET/icon_512x512@2x.png" > /dev/null
+    sips -z 16 16     "$SCRIPT_DIR/docs/icon.png" --out "$ICONSET/icon_16x16.png"      > /dev/null
+    sips -z 32 32     "$SCRIPT_DIR/docs/icon.png" --out "$ICONSET/icon_16x16@2x.png"   > /dev/null
+    sips -z 32 32     "$SCRIPT_DIR/docs/icon.png" --out "$ICONSET/icon_32x32.png"      > /dev/null
+    sips -z 64 64     "$SCRIPT_DIR/docs/icon.png" --out "$ICONSET/icon_32x32@2x.png"   > /dev/null
+    sips -z 128 128   "$SCRIPT_DIR/docs/icon.png" --out "$ICONSET/icon_128x128.png"    > /dev/null
+    sips -z 256 256   "$SCRIPT_DIR/docs/icon.png" --out "$ICONSET/icon_128x128@2x.png" > /dev/null
+    sips -z 256 256   "$SCRIPT_DIR/docs/icon.png" --out "$ICONSET/icon_256x256.png"    > /dev/null
+    sips -z 512 512   "$SCRIPT_DIR/docs/icon.png" --out "$ICONSET/icon_256x256@2x.png" > /dev/null
+    sips -z 512 512   "$SCRIPT_DIR/docs/icon.png" --out "$ICONSET/icon_512x512.png"    > /dev/null
+    sips -z 1024 1024 "$SCRIPT_DIR/docs/icon.png" --out "$ICONSET/icon_512x512@2x.png" > /dev/null
     iconutil -c icns "$ICONSET" -o "$RESOURCES_DIR/AppIcon.icns"
     rm -rf "$ICONSET"
 fi
