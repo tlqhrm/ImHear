@@ -5,8 +5,16 @@ import CoreMedia
 import CoreAudio
 import ServiceManagement
 
-let kAppVersion = "1.0.1"
+let kAppVersion = "1.0.2"
 let kGitHubRepo = "tlqhrm/ImHear"
+
+// ═══════════════════════════════════════════════════════════
+// MARK: - Localization
+// ═══════════════════════════════════════════════════════════
+
+let isKorean = Locale.preferredLanguages.first?.hasPrefix("ko") == true
+
+func L(_ en: String, _ ko: String) -> String { isKorean ? ko : en }
 
 // ═══════════════════════════════════════════════════════════
 // MARK: - System Helpers
@@ -141,8 +149,9 @@ class PermissionBanner: NSView {
         tLbl.textColor = .secondaryLabelColor; tLbl.lineBreakMode = .byTruncatingTail
         addSubview(tLbl)
 
-        let arrow = NSTextField(frame: NSRect(x: frame.width - 26, y: (frame.height-14)/2, width: 20, height: 14))
-        arrow.stringValue = "Fix"; arrow.isEditable = false; arrow.isBordered = false
+        let arrowW: CGFloat = isKorean ? 30 : 20
+        let arrow = NSTextField(frame: NSRect(x: frame.width - arrowW - 6, y: (frame.height-14)/2, width: arrowW, height: 14))
+        arrow.stringValue = L("Fix", "설정"); arrow.isEditable = false; arrow.isBordered = false
         arrow.drawsBackground = false; arrow.font = .systemFont(ofSize: 10, weight: .semibold)
         arrow.textColor = .systemBlue; arrow.alignment = .right
         addSubview(arrow)
@@ -209,7 +218,7 @@ class MeterSlider: NSView {
 
     override init(frame: NSRect) {
         super.init(frame: frame)
-        wantsLayer = true; layer?.cornerRadius = 5
+        wantsLayer = true; layer?.cornerRadius = 5; layer?.masksToBounds = false
         layer?.backgroundColor = NSColor.quaternarySystemFill.cgColor
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -221,19 +230,21 @@ class MeterSlider: NSView {
     override func draw(_ dirtyRect: NSRect) {
         let b = bounds
         let barW = b.width * min(level, 1.0)
-        let c: NSColor = level >= threshold && threshold > 0.005 ? .systemRed :
-            level >= threshold * 0.7 && threshold > 0.005 ? .systemOrange : barColor
+        let c: NSColor = threshold > 0.005 ?
+            (level >= threshold ? .systemRed : level >= threshold * 0.7 ? .systemOrange : barColor) :
+            barColor.withAlphaComponent(0.3)
         c.setFill()
         NSBezierPath(roundedRect: NSRect(x: 0, y: 0, width: barW, height: b.height), xRadius: 5, yRadius: 5).fill()
         NSColor.white.withAlphaComponent(0.12).setFill()
         for i in 1..<10 { NSRect(x: b.width * CGFloat(i)/10, y: 0, width: 1, height: b.height).fill() }
-        if threshold > 0.005 {
-            let tx = b.width * min(max(threshold, 0), 1.0)
-            NSColor.white.setFill()
-            NSBezierPath(roundedRect: NSRect(x: tx-2, y: 0, width: 4, height: b.height), xRadius: 2, yRadius: 2).fill()
-            NSColor.black.withAlphaComponent(0.25).setFill()
-            NSRect(x: tx-0.5, y: 0, width: 1, height: b.height).fill()
-        }
+        let tx = b.width * min(max(threshold, 0), 1.0)
+        let handleX = max(min(tx, b.width - 3), 3)
+        let handleH: CGFloat = b.height + 4
+        let handleY: CGFloat = (b.height - handleH) / 2
+        NSColor.white.setFill()
+        NSBezierPath(roundedRect: NSRect(x: handleX-3, y: handleY, width: 6, height: handleH), xRadius: 3, yRadius: 3).fill()
+        NSColor.black.withAlphaComponent(0.2).setStroke()
+        NSBezierPath(roundedRect: NSRect(x: handleX-3, y: handleY, width: 6, height: handleH), xRadius: 3, yRadius: 3).stroke()
     }
 
     override func mouseDown(with e: NSEvent) { drag(e) }
@@ -257,7 +268,10 @@ class UpdateChecker {
     }
 
     var latestRelease: Release?
-    var isUpdateAvailable: Bool { latestRelease != nil && latestRelease!.version != kAppVersion }
+    var isUpdateAvailable: Bool {
+        guard let release = latestRelease else { return false }
+        return release.version.compare(kAppVersion, options: .numeric) == .orderedDescending
+    }
     private var checkTimer: Timer?
 
     func startPeriodicCheck(interval: TimeInterval = 3 * 3600) {
@@ -298,8 +312,8 @@ class UpdateChecker {
         URLSession.shared.downloadTask(with: url) { tmpURL, response, err in
             guard let tmpURL = tmpURL, err == nil else {
                 DispatchQueue.main.async {
-                    let a = NSAlert(); a.messageText = "Update Failed"
-                    a.informativeText = err?.localizedDescription ?? "Download failed"
+                    let a = NSAlert(); a.messageText = L("Update Failed", "업데이트 실패")
+                    a.informativeText = err?.localizedDescription ?? L("Download failed", "다운로드 실패")
                     a.runModal()
                 }
                 return
@@ -321,24 +335,36 @@ class UpdateChecker {
                 try? FileManager.default.removeItem(at: unzipDir)
                 try FileManager.default.createDirectory(at: unzipDir, withIntermediateDirectories: true)
                 let proc = Process()
-                proc.executableURL = URL(fileURLWithPath: "/usr/bin/unzip")
-                proc.arguments = ["-o", tmpFile.path, "-d", unzipDir.path]
+                proc.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+                proc.arguments = ["-x", "-k", tmpFile.path, unzipDir.path]
                 proc.standardOutput = Pipe(); proc.standardError = Pipe()
                 try proc.run(); proc.waitUntilExit()
 
                 // Find .app in unzipped contents
                 let contents = try FileManager.default.contentsOfDirectory(at: unzipDir, includingPropertiesForKeys: nil)
                 guard let newApp = contents.first(where: { $0.pathExtension == "app" }) else {
-                    let a = NSAlert(); a.messageText = "Update Failed"
-                    a.informativeText = "No .app found in archive"; a.runModal(); return
+                    let a = NSAlert(); a.messageText = L("Update Failed", "업데이트 실패")
+                    a.informativeText = L("No .app found in archive", "아카이브에서 앱을 찾을 수 없습니다"); a.runModal(); return
                 }
                 // Replace current app
                 try? FileManager.default.removeItem(at: appURL)
                 try FileManager.default.moveItem(at: newApp, to: appURL)
+                // Remove quarantine attribute
+                let xattr = Process()
+                xattr.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
+                xattr.arguments = ["-rd", "com.apple.quarantine", appURL.path]
+                xattr.standardOutput = Pipe(); xattr.standardError = Pipe()
+                try? xattr.run(); xattr.waitUntilExit()
             } else {
                 // Direct binary or .app replacement
                 try? FileManager.default.removeItem(at: appURL)
                 try FileManager.default.moveItem(at: tmpFile, to: parentDir.appendingPathComponent(filename))
+                // Remove quarantine attribute
+                let xattr = Process()
+                xattr.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
+                xattr.arguments = ["-rd", "com.apple.quarantine", parentDir.appendingPathComponent(filename).path]
+                xattr.standardOutput = Pipe(); xattr.standardError = Pipe()
+                try? xattr.run(); xattr.waitUntilExit()
             }
 
             // Relaunch
@@ -348,7 +374,7 @@ class UpdateChecker {
             try task.run()
             NSApp.terminate(nil)
         } catch {
-            let a = NSAlert(); a.messageText = "Update Failed"
+            let a = NSAlert(); a.messageText = L("Update Failed", "업데이트 실패")
             a.informativeText = error.localizedDescription; a.runModal()
         }
     }
@@ -407,8 +433,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         loadDefaults(); didLoad = true
         soundDetector = SoundDetector(); soundDetector.delegate = self
         setupStatusBar()
-        AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary)
-        if isEnabled { soundDetector.start() }
+        // Request permissions sequentially: mic first, then accessibility
+        let micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+        if micStatus == .notDetermined {
+            AVCaptureDevice.requestAccess(for: .audio) { [weak self] _ in
+                DispatchQueue.main.async {
+                    AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary)
+                    if self?.isEnabled == true { self?.soundDetector.start() }
+                }
+            }
+        } else {
+            AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue(): true] as CFDictionary)
+            if isEnabled { soundDetector.start() }
+        }
         registerSleepWake()
         registerDeviceListener()
         // Live meter update in status bar
@@ -425,7 +462,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         d.register(defaults: [
             UDKey.sensitivity: 0.5,
             UDKey.volumeThreshold: 0.10,
-            UDKey.resumeDelay: 3.0,
+            UDKey.resumeDelay: 15.0,
             UDKey.actionMode: ActionMode.pauseMedia.rawValue,
             UDKey.targetVolume: 0.1,
             UDKey.isEnabled: true,
@@ -434,6 +471,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         sensitivity      = d.float(forKey: UDKey.sensitivity)
         volumeThreshold  = d.float(forKey: UDKey.volumeThreshold)
         resumeDelay      = d.double(forKey: UDKey.resumeDelay)
+        // Migrate: old default(3) or non-5-step values → snap to nearest 5 (min 15 for old users)
+        if resumeDelay > 0, resumeDelay < 5 { resumeDelay = 15 }
+        else if Int(resumeDelay) % 5 != 0 { resumeDelay = TimeInterval(Int(round(resumeDelay / 5.0) * 5)) }
         actionMode       = ActionMode(rawValue: d.integer(forKey: UDKey.actionMode)) ?? .pauseMedia
         targetVolume     = d.float(forKey: UDKey.targetVolume)
         isEnabled        = d.bool(forKey: UDKey.isEnabled)
@@ -620,6 +660,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         case .volumeDown:
             guard !isVolumeDownByUs else { return }
             savedVolume = getSystemVolume()
+            guard savedVolume > targetVolume else { return }
             setSystemVolume(targetVolume); isVolumeDownByUs = true
         }
         updateIcon(speaking: true); popoverVC?.refreshStatus(text: statusTextForAction(), color: .systemYellow)
@@ -653,15 +694,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     var isActionActive: Bool { isPausedByUs || isVolumeDownByUs }
 
     func currentStatusText() -> (String, NSColor) {
-        if !isEnabled { return ("Disabled", .tertiaryLabelColor) }
-        if isPausedByUs { return ("⏸ Media paused", .systemYellow) }
-        if isVolumeDownByUs { return ("🔉 Volume lowered", .systemYellow) }
-        if resumeTimer != nil { return ("Resume in \(Int(resumeDelay))s…", .secondaryLabelColor) }
-        return ("Listening…", .secondaryLabelColor)
+        if !isEnabled { return (L("Disabled", "비활성"), .tertiaryLabelColor) }
+        if isPausedByUs { return (L("⏸ Media paused", "⏸ 미디어 일시정지"), .systemYellow) }
+        if isVolumeDownByUs { return (L("🔉 Volume lowered", "🔉 볼륨 낮춤"), .systemYellow) }
+        if resumeTimer != nil { return (L("Resume in \(Int(resumeDelay))s…", "\(Int(resumeDelay))초 후 재생…"), .secondaryLabelColor) }
+        return (L("Listening…", "듣는 중…"), .secondaryLabelColor)
     }
 
     func statusTextForAction() -> String {
-        actionMode == .pauseMedia ? "⏸ Media paused" : "🔉 Volume lowered"
+        actionMode == .pauseMedia ? L("⏸ Media paused", "⏸ 미디어 일시정지") : L("🔉 Volume lowered", "🔉 볼륨 낮춤")
     }
 }
 
@@ -701,7 +742,7 @@ extension AppDelegate: SoundDetectorDelegate {
             s.updateIcon(speaking: false)
             if s.isActionActive {
                 if s.resumeDelay < 1 {
-                    s.popoverVC?.refreshStatus(text: "Paused (manual)", color: .systemYellow)
+                    s.popoverVC?.refreshStatus(text: L("Paused (manual)", "일시정지 (수동)"), color: .systemYellow)
                 }
                 // else: countdown already running from triggerAction/scheduleResume
             } else { s.popoverVC?.refreshStatus() }
@@ -722,6 +763,7 @@ class SettingsVC: NSViewController {
     var volumeVal: NSTextField!
     var targetVolSlider: NSSlider!
     var targetVolLabel: NSTextField!
+    var targetVolWarn: NSTextField!
     var delayLabel: NSTextField!
     var micPopup: NSPopUpButton!
     var versionLabel: NSTextField!
@@ -751,21 +793,21 @@ class SettingsVC: NSViewController {
             .systemFont(ofSize: 10, weight: .light), .tertiaryLabelColor, .right))
 
         y -= 18
-        statusLabel = lbl(P, y, iW, 14, "Listening…", .systemFont(ofSize: 11), .secondaryLabelColor)
+        statusLabel = lbl(P, y, iW, 14, L("Listening…", "듣는 중…"), .systemFont(ofSize: 11), .secondaryLabelColor)
         view.addSubview(statusLabel)
 
         // Permission banners
         if needMic {
             y -= (bannerH + bannerGap)
             let b = PermissionBanner(frame: NSRect(x: P, y: y, width: iW, height: bannerH),
-                icon: "🎤", text: "Microphone access required")
+                icon: "🎤", text: L("Microphone access required", "마이크 권한이 필요합니다"))
             b.onClick = { openMicSettings() }
             view.addSubview(b); micBanner = b
         }
         if needAx {
             y -= (bannerH + bannerGap)
             let b = PermissionBanner(frame: NSRect(x: P, y: y, width: iW, height: bannerH),
-                icon: "🔐", text: "Accessibility access required")
+                icon: "🔐", text: L("Accessibility access required", "손쉬운 사용 권한이 필요합니다"))
             b.onClick = { openAccessibilitySettings() }
             view.addSubview(b); axBanner = b
         }
@@ -773,7 +815,7 @@ class SettingsVC: NSViewController {
         // Enable toggle
         y -= 28
         let tog = NSButton(frame: NSRect(x: P, y: y, width: iW, height: 20))
-        tog.setButtonType(.switch); tog.title = " Enable Detection"
+        tog.setButtonType(.switch); tog.title = L(" Enable Detection", " 감지 활성화")
         tog.font = .systemFont(ofSize: 12, weight: .medium)
         tog.state = app.isEnabled ? .on : .off
         tog.target = self; tog.action = #selector(togEnable(_:))
@@ -782,7 +824,7 @@ class SettingsVC: NSViewController {
         y -= 8; addSep(y)
 
         // Mic
-        y -= 16; view.addSubview(sec(P, y, "MICROPHONE"))
+        y -= 16; view.addSubview(sec(P, y, L("MICROPHONE", "마이크")))
         y -= 24
         micPopup = NSPopUpButton(frame: NSRect(x: P, y: y, width: iW, height: 20), pullsDown: false)
         micPopup.font = .systemFont(ofSize: 11); micPopup.controlSize = .small
@@ -793,17 +835,17 @@ class SettingsVC: NSViewController {
         y -= 8; addSep(y)
 
         // Action
-        y -= 16; view.addSubview(sec(P, y, "ACTION"))
+        y -= 16; view.addSubview(sec(P, y, L("ACTION", "동작")))
         y -= 22
-        let r1 = NSButton(radioButtonWithTitle: " ⏸ Pause", target: self, action: #selector(actPick(_:)))
+        let r1 = NSButton(radioButtonWithTitle: L(" ⏸ Pause", " ⏸ 일시정지"), target: self, action: #selector(actPick(_:)))
         r1.frame = NSRect(x: P, y: y, width: iW/2, height: 18); r1.font = .systemFont(ofSize: 11)
         r1.tag = 0; r1.state = app.actionMode == .pauseMedia ? .on : .off; view.addSubview(r1)
-        let r2 = NSButton(radioButtonWithTitle: " 🔉 Vol Down", target: self, action: #selector(actPick(_:)))
+        let r2 = NSButton(radioButtonWithTitle: L(" 🔉 Vol Down", " 🔉 볼륨 낮춤"), target: self, action: #selector(actPick(_:)))
         r2.frame = NSRect(x: P+iW/2, y: y, width: iW/2, height: 18); r2.font = .systemFont(ofSize: 11)
         r2.tag = 1; r2.state = app.actionMode == .volumeDown ? .on : .off; view.addSubview(r2)
 
         y -= 22
-        view.addSubview(lbl(P, y+2, 65, 14, "Target Vol", .systemFont(ofSize: 10, weight: .medium), .secondaryLabelColor))
+        view.addSubview(lbl(P, y+2, 65, 14, L("Target Vol", "낮출 볼륨"), .systemFont(ofSize: 10, weight: .medium), .secondaryLabelColor))
         targetVolSlider = NSSlider(frame: NSRect(x: P+68, y: y, width: iW-112, height: 18))
         targetVolSlider.minValue = 0; targetVolSlider.maxValue = 50
         targetVolSlider.integerValue = Int(app.targetVolume*100)
@@ -815,13 +857,20 @@ class SettingsVC: NSViewController {
             .monospacedDigitSystemFont(ofSize: 10, weight: .medium), .tertiaryLabelColor, .right)
         view.addSubview(targetVolLabel)
 
-        y -= 8; addSep(y)
+        y -= 14
+        targetVolWarn = lbl(P, y, iW, 10, "",
+            .systemFont(ofSize: 8.5), .systemOrange)
+        view.addSubview(targetVolWarn)
+
+        y -= 4; addSep(y)
 
         // Detection
-        y -= 16; view.addSubview(sec(P, y, "DETECTION"))
+        y -= 18; view.addSubview(sec(P, y, L("DETECTION", "감지")))
+        y -= 12; view.addSubview(lbl(P, y, iW, 10, L("Both must be detected to trigger", "두 조건 모두 충족해야 작동합니다"),
+            .systemFont(ofSize: 8.5), .quaternaryLabelColor))
 
         y -= 14
-        view.addSubview(lbl(P, y, 80, 12, "🗣 Speech", .systemFont(ofSize: 10, weight: .semibold), .secondaryLabelColor))
+        view.addSubview(lbl(P, y, 80, 12, L("🗣 Speech", "🗣 말소리"), .systemFont(ofSize: 10, weight: .semibold), .secondaryLabelColor))
         speechVal = lbl(P, y, iW, 12, "\(Int(app.sensitivity*100))%",
             .monospacedDigitSystemFont(ofSize: 10, weight: .medium), .tertiaryLabelColor, .right)
         view.addSubview(speechVal)
@@ -835,7 +884,7 @@ class SettingsVC: NSViewController {
         view.addSubview(speechMeter)
 
         y -= 18
-        view.addSubview(lbl(P, y, 80, 12, "🔊 Volume", .systemFont(ofSize: 10, weight: .semibold), .secondaryLabelColor))
+        view.addSubview(lbl(P, y, 80, 12, L("🔊 Volume", "🔊 볼륨"), .systemFont(ofSize: 10, weight: .semibold), .secondaryLabelColor))
         volumeVal = lbl(P, y, iW, 12, app.volumeThreshold < 0.005 ? "OFF" : "\(Int(app.volumeThreshold*100))%",
             .monospacedDigitSystemFont(ofSize: 10, weight: .medium), .tertiaryLabelColor, .right)
         view.addSubview(volumeVal)
@@ -852,32 +901,32 @@ class SettingsVC: NSViewController {
         y -= 8; addSep(y)
 
         // Resume
-        y -= 16; view.addSubview(sec(P, y, "AUTO RESUME"))
+        y -= 16; view.addSubview(sec(P, y, L("AUTO RESUME", "자동 재생")))
         y -= 22
-        view.addSubview(lbl(P, y+2, 42, 14, "Delay", .systemFont(ofSize: 10, weight: .medium), .secondaryLabelColor))
+        view.addSubview(lbl(P, y+2, 42, 14, L("Delay", "딜레이"), .systemFont(ofSize: 10, weight: .medium), .secondaryLabelColor))
         let ds = NSSlider(frame: NSRect(x: P+44, y: y, width: iW-88, height: 18))
-        ds.minValue = 0; ds.maxValue = 15; ds.integerValue = Int(app.resumeDelay)
-        ds.controlSize = .small; ds.numberOfTickMarks = 16; ds.isContinuous = true
+        ds.minValue = 0; ds.maxValue = 60; ds.integerValue = Int(app.resumeDelay)
+        ds.controlSize = .small; ds.numberOfTickMarks = 13; ds.allowsTickMarkValuesOnly = true; ds.isContinuous = true
         ds.target = self; ds.action = #selector(delayChg(_:))
         view.addSubview(ds)
-        delayLabel = lbl(iW-20, y+2, 36, 14, app.resumeDelay < 1 ? "Never" : "\(Int(app.resumeDelay))s",
+        delayLabel = lbl(iW-20, y+2, 36, 14, app.resumeDelay < 1 ? L("Never", "사용 안 함") : "\(Int(app.resumeDelay))s",
             .monospacedDigitSystemFont(ofSize: 10, weight: .medium), .tertiaryLabelColor, .right)
         view.addSubview(delayLabel)
 
         y -= 8; addSep(y)
 
         // Options
-        y -= 16; view.addSubview(sec(P, y, "OPTIONS"))
+        y -= 16; view.addSubview(sec(P, y, L("OPTIONS", "옵션")))
         y -= 22
         let meterTog = NSButton(frame: NSRect(x: P, y: y, width: iW/2, height: 18))
-        meterTog.setButtonType(.switch); meterTog.title = " Show Meter"
+        meterTog.setButtonType(.switch); meterTog.title = L(" Show Meter", " 미터 표시")
         meterTog.font = .systemFont(ofSize: 11)
         meterTog.state = app.showMeter ? .on : .off
         meterTog.target = self; meterTog.action = #selector(togMeter(_:))
         view.addSubview(meterTog)
 
         let loginTog = NSButton(frame: NSRect(x: P + iW/2, y: y, width: iW/2, height: 18))
-        loginTog.setButtonType(.switch); loginTog.title = " Launch at Login"
+        loginTog.setButtonType(.switch); loginTog.title = L(" Launch at Login", " 로그인 시 자동 실행")
         loginTog.font = .systemFont(ofSize: 11)
         loginTog.state = isLaunchAtLoginEnabled() ? .on : .off
         loginTog.target = self; loginTog.action = #selector(togLaunchAtLogin(_:))
@@ -892,7 +941,7 @@ class SettingsVC: NSViewController {
         view.addSubview(versionLabel)
 
         updateBtn = NSButton(frame: NSRect(x: P+82, y: y, width: 80, height: 20))
-        updateBtn.title = "Update"; updateBtn.bezelStyle = .rounded; updateBtn.controlSize = .small
+        updateBtn.title = L("Update", "업데이트"); updateBtn.bezelStyle = .rounded; updateBtn.controlSize = .small
         updateBtn.font = .systemFont(ofSize: 10, weight: .medium)
         updateBtn.contentTintColor = .systemGreen
         updateBtn.target = self; updateBtn.action = #selector(doUpdate)
@@ -900,10 +949,11 @@ class SettingsVC: NSViewController {
         view.addSubview(updateBtn)
 
         let q = NSButton(frame: NSRect(x: W - P - 50, y: y, width: 50, height: 20))
-        q.title = "Quit"; q.bezelStyle = .rounded; q.controlSize = .small
+        q.title = L("Quit", "종료"); q.bezelStyle = .rounded; q.controlSize = .small
         q.font = .systemFont(ofSize: 11); q.target = self; q.action = #selector(quit)
         view.addSubview(q)
 
+        updateTargetVolLabel()
         startTimer()
     }
 
@@ -917,14 +967,14 @@ class SettingsVC: NSViewController {
             if let fire = a.resumeFireTime {
                 let rem = max(0, fire.timeIntervalSinceNow)
                 if rem > 0 {
-                    s.statusLabel?.stringValue = String(format: "Resume in %.1fs…", rem)
+                    s.statusLabel?.stringValue = isKorean ? String(format: "%.1f초 후 재생…", rem) : String(format: "Resume in %.1fs…", rem)
                     s.statusLabel?.textColor = .secondaryLabelColor
                 }
             }
             // check permissions every ~2s
             permCheckCounter += 1
             if permCheckCounter >= 20 {
-                permCheckCounter = 0; s.checkPermissionBanners()
+                permCheckCounter = 0; s.checkPermissionBanners(); s.updateTargetVolLabel()
                 // update version label if update available
                 if a.updateChecker.isUpdateAvailable, let rel = a.updateChecker.latestRelease {
                     s.versionLabel?.stringValue = "v\(kAppVersion) → v\(rel.version)"
@@ -946,7 +996,7 @@ class SettingsVC: NSViewController {
         }
     }
 
-    func refreshStatus(text: String = "Listening…", color: NSColor = .secondaryLabelColor) {
+    func refreshStatus(text: String = L("Listening…", "듣는 중…"), color: NSColor = .secondaryLabelColor) {
         statusLabel?.stringValue = text; statusLabel?.textColor = color
     }
 
@@ -993,12 +1043,26 @@ class SettingsVC: NSViewController {
 
     @objc func tvChg(_ s: NSSlider) {
         app.targetVolume = Float(s.integerValue)/100.0
-        targetVolLabel?.stringValue = "\(s.integerValue)%"
+        updateTargetVolLabel()
+    }
+    func updateTargetVolLabel() {
+        let pct = Int(app.targetVolume * 100)
+        let sysVol = Int(getSystemVolume() * 100)
+        targetVolLabel?.stringValue = "\(pct)%"
+        if app.actionMode == .volumeDown && pct >= sysVol {
+            targetVolWarn?.stringValue = L("⚠️ Target is louder than current volume (\(sysVol)%)", "⚠️ 현재 볼륨(\(sysVol)%)보다 타겟이 높아 작동하지 않습니다")
+            targetVolWarn?.isHidden = false
+        } else {
+            targetVolWarn?.stringValue = ""
+            targetVolWarn?.isHidden = true
+        }
     }
 
     @objc func delayChg(_ s: NSSlider) {
-        app.resumeDelay = TimeInterval(s.integerValue)
-        delayLabel?.stringValue = s.integerValue == 0 ? "Never" : "\(s.integerValue)s"
+        let snapped = Int(round(Double(s.integerValue) / 5.0) * 5)
+        s.integerValue = snapped
+        app.resumeDelay = TimeInterval(snapped)
+        delayLabel?.stringValue = snapped == 0 ? L("Never", "사용 안 함") : "\(snapped)s"
     }
 
     @objc func togMeter(_ s: NSButton) {
@@ -1007,7 +1071,7 @@ class SettingsVC: NSViewController {
     }
 
     @objc func doUpdate() {
-        updateBtn.isEnabled = false; updateBtn.title = "Downloading…"
+        updateBtn.isEnabled = false; updateBtn.title = L("Downloading…", "다운로드 중…")
         app.updateChecker.downloadAndInstall()
     }
 
@@ -1026,7 +1090,7 @@ class SettingsVC: NSViewController {
         l.font = f; l.textColor = c; l.alignment = a; return l
     }
     func sec(_ x: CGFloat, _ y: CGFloat, _ t: String) -> NSTextField {
-        lbl(x, y, 200, 12, t, .systemFont(ofSize: 9, weight: .heavy), .tertiaryLabelColor)
+        lbl(x, y, 200, 14, t, .systemFont(ofSize: 11, weight: .heavy), .tertiaryLabelColor)
     }
     func addSep(_ y: CGFloat) {
         let s = NSBox(frame: NSRect(x: 16, y: y, width: 268, height: 1))

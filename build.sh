@@ -4,7 +4,11 @@ set -e
 echo "🔨 Building ImHear..."
 swift build -c release 2>&1
 
-APP_DIR="$HOME/Applications/ImHear.app"
+# Extract version from source code
+APP_VERSION=$(grep -m1 'let kAppVersion' ImHear/main.swift | sed 's/.*"\(.*\)".*/\1/')
+echo "📌 Version: $APP_VERSION"
+
+APP_DIR="/Applications/ImHear.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
@@ -33,7 +37,7 @@ if [ -f "$SCRIPT_DIR/docs/icon.png" ]; then
     rm -rf "$ICONSET"
 fi
 
-cat > "$CONTENTS_DIR/Info.plist" << 'PLIST'
+cat > "$CONTENTS_DIR/Info.plist" << PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -45,9 +49,9 @@ cat > "$CONTENTS_DIR/Info.plist" << 'PLIST'
     <key>CFBundleIdentifier</key>
     <string>com.custom.imhear</string>
     <key>CFBundleVersion</key>
-    <string>1.0.0</string>
+    <string>${APP_VERSION}</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
+    <string>${APP_VERSION}</string>
     <key>CFBundleExecutable</key>
     <string>ImHear</string>
     <key>CFBundleIconFile</key>
@@ -78,27 +82,30 @@ cat > /tmp/ImHear.entitlements << 'ENT'
 ENT
 
 if [[ "$1" == "--release" ]]; then
-    SIGN_IDENTITY="CA2754626BC60B9C14EB5D1309916BE3997C859C"
+    SIGN_IDENTITY="Developer ID Application: JI HUN KIM (5L332XDJ8Q)"
     echo "🔏 Signing with Developer ID..."
-    codesign --force --deep --options runtime --sign "$SIGN_IDENTITY" --entitlements /tmp/ImHear.entitlements "$APP_DIR"
+    codesign --force --options runtime --sign "$SIGN_IDENTITY" --entitlements /tmp/ImHear.entitlements "$MACOS_DIR/ImHear"
+    codesign --force --options runtime --sign "$SIGN_IDENTITY" --entitlements /tmp/ImHear.entitlements "$APP_DIR"
 
     ZIP_PATH="$(pwd)/ImHear.zip"
     rm -f "$ZIP_PATH"
     ditto -c -k --keepParent "$APP_DIR" "$ZIP_PATH"
 
     echo "📤 Submitting for notarization..."
-    SUBMIT_OUT=$(xcrun notarytool submit "$ZIP_PATH" --keychain-profile "ImHear-Notary" 2>&1)
-    echo "$SUBMIT_OUT"
-    SUBMISSION_ID=$(echo "$SUBMIT_OUT" | grep "id:" | head -1 | awk '{print $2}')
+    xcrun notarytool submit "$ZIP_PATH" \
+        --apple-id "tlqhrm@naver.com" \
+        --team-id "5L332XDJ8Q" \
+        --password "pqfz-hlpy-xjwq-jsji" \
+        --wait
+
+    echo "📎 Stapling..."
+    xcrun stapler staple "$APP_DIR"
+
+    rm -f "$ZIP_PATH"
+    ditto -c -k --keepParent "$APP_DIR" "$ZIP_PATH"
 
     echo ""
-    echo "⏳ Notarization submitted! Check status with:"
-    echo "   xcrun notarytool info $SUBMISSION_ID --keychain-profile \"ImHear-Notary\""
-    echo ""
-    echo "When status is 'Accepted', run:"
-    echo "   xcrun stapler staple \"$APP_DIR\" && rm -f \"$ZIP_PATH\" && ditto -c -k --keepParent \"$APP_DIR\" \"$ZIP_PATH\""
-    echo ""
-    echo "📦 Release archive (pre-staple): $ZIP_PATH"
+    echo "✅ Notarized! → $ZIP_PATH"
 else
     echo "🔏 Signing (ad-hoc)..."
     codesign --force --deep --sign - --entitlements /tmp/ImHear.entitlements "$APP_DIR"
