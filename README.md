@@ -4,6 +4,13 @@
 
 # ImHear
 
+<p align="center">
+  <img src="https://img.shields.io/github/downloads/tlqhrm/ImHear/total?style=flat&label=Downloads&color=3fb950" alt="Downloads">
+  <img src="https://img.shields.io/github/v/release/tlqhrm/ImHear?style=flat&label=Latest&color=58a6ff" alt="Latest Release">
+  <img src="https://img.shields.io/badge/macOS-14%2B-white?style=flat" alt="macOS 14+">
+  <img src="https://img.shields.io/github/license/tlqhrm/ImHear?style=flat&color=8b949e" alt="License">
+</p>
+
 A lightweight macOS menu bar app that detects nearby speech and automatically pauses or lowers your media volume.
 
 ![ImHear Screenshot](docs/screenshot.png)

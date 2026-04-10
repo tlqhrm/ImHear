@@ -5,7 +5,7 @@ import CoreMedia
 import CoreAudio
 import ServiceManagement
 
-let kAppVersion = "1.0.0"
+let kAppVersion = "1.0.1"
 let kGitHubRepo = "tlqhrm/ImHear"
 
 // ═══════════════════════════════════════════════════════════
@@ -401,6 +401,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var displayTimer: Timer?
     // CoreAudio device-change listener
     private var deviceListenerBlock: AudioObjectPropertyListenerBlock?
+    private var deviceChangeWork: DispatchWorkItem?
 
     func applicationDidFinishLaunching(_ n: Notification) {
         loadDefaults(); didLoad = true
@@ -485,16 +486,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     private func handleDeviceChange() {
-        let wasRunning = soundDetector.isRunning
-        let gain = soundDetector.micGain
-        soundDetector.stop()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+        // Debounce: CoreAudio often fires multiple events per single device change
+        deviceChangeWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            self.soundDetector.micGain = gain
-            if wasRunning && self.isEnabled { self.soundDetector.start() }
-            // refresh popover mic list if open
-            self.popoverVC?.reloadMicList()
+            let wasRunning = self.soundDetector.isRunning
+            let gain = self.soundDetector.micGain
+            self.soundDetector.stop()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                guard let self else { return }
+                self.soundDetector.micGain = gain
+                if wasRunning && self.isEnabled { self.soundDetector.start() }
+                self.popoverVC?.reloadMicList()
+            }
         }
+        deviceChangeWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
     }
 
     func setupStatusBar() {
@@ -1072,7 +1079,7 @@ class SoundDetector: NSObject {
         audioEngine = AVAudioEngine()
         let node = audioEngine.inputNode
         let fmt = node.inputFormat(forBus: 0)
-        guard fmt.sampleRate > 0 else { return }
+        guard fmt.sampleRate > 0, fmt.channelCount > 0 else { return }
 
         streamAnalyzer = SNAudioStreamAnalyzer(format: fmt)
         do {
@@ -1083,13 +1090,15 @@ class SoundDetector: NSObject {
         } catch { return }
 
         node.installTap(onBus: 0, bufferSize: 8192, format: fmt) { [weak self] buf, time in
-            guard let self = self else { return }
+            guard let self = self, self.isRunning else { return }
             if let ch = buf.floatChannelData?[0] {
                 let n = Int(buf.frameLength); var s: Float = 0
                 for i in 0..<n { s += ch[i]*ch[i] }
                 self.currentVolumeLevel = min(sqrt(s/Float(n)) * self.micGain, 1.0)
             }
-            self.analysisQueue.async { self.streamAnalyzer?.analyze(buf, atAudioFramePosition: time.sampleTime) }
+            self.analysisQueue.async { [weak self] in
+                self?.streamAnalyzer?.analyze(buf, atAudioFramePosition: time.sampleTime)
+            }
         }
         do { try audioEngine.start(); isRunning = true } catch { }
     }
@@ -1097,11 +1106,13 @@ class SoundDetector: NSObject {
     func stop() {
         guard isRunning else { return }
         isRunning = false
-        audioEngine.inputNode.removeTap(onBus: 0)
         audioEngine.stop()
+        audioEngine.inputNode.removeTap(onBus: 0)
         // Drain analysis queue so no pending analyze() is using the analyzer
         analysisQueue.sync {}
         streamAnalyzer = nil
+        currentSpeechConfidence = 0
+        currentVolumeLevel = 0
     }
 }
 
