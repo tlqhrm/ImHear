@@ -5,7 +5,7 @@ import CoreMedia
 import CoreAudio
 import ServiceManagement
 
-let kAppVersion = "1.0.2"
+let kAppVersion = "1.0.5"
 let kGitHubRepo = "tlqhrm/ImHear"
 
 // ═══════════════════════════════════════════════════════════
@@ -530,18 +530,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         deviceChangeWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
-            let wasRunning = self.soundDetector.isRunning
             let gain = self.soundDetector.micGain
             self.soundDetector.stop()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                guard let self else { return }
-                self.soundDetector.micGain = gain
-                if wasRunning && self.isEnabled { self.soundDetector.start() }
-                self.popoverVC?.reloadMicList()
-            }
+            self.soundDetector.micGain = gain
+            if self.isEnabled { self.soundDetector.start() }
+            self.popoverVC?.reloadMicList()
         }
         deviceChangeWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
+        // Wait 0.8s for hardware to settle before restarting
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: work)
     }
 
     func setupStatusBar() {
@@ -1138,8 +1135,19 @@ class SoundDetector: NSObject {
         "narration":"Narration","babble":"Babble"
     ]
 
+    private func teardown() {
+        audioEngine.stop()
+        audioEngine.inputNode.removeTap(onBus: 0)
+        let analyzer = streamAnalyzer
+        streamAnalyzer = nil
+        analysisQueue.async { _ = analyzer }
+        currentSpeechConfidence = 0
+        currentVolumeLevel = 0
+    }
+
     func start() {
-        guard !isRunning else { return }
+        if isRunning { teardown() }
+        isRunning = false
         audioEngine = AVAudioEngine()
         let node = audioEngine.inputNode
         let fmt = node.inputFormat(forBus: 0)
@@ -1151,7 +1159,7 @@ class SoundDetector: NSObject {
             req.windowDuration = CMTimeMakeWithSeconds(0.5, preferredTimescale: 48_000)
             req.overlapFactor = 0.5
             try streamAnalyzer?.add(req, withObserver: self)
-        } catch { return }
+        } catch { streamAnalyzer = nil; return }
 
         node.installTap(onBus: 0, bufferSize: 8192, format: fmt) { [weak self] buf, time in
             guard let self = self, self.isRunning else { return }
@@ -1164,25 +1172,23 @@ class SoundDetector: NSObject {
                 self?.streamAnalyzer?.analyze(buf, atAudioFramePosition: time.sampleTime)
             }
         }
-        do { try audioEngine.start(); isRunning = true } catch { }
+        do {
+            try audioEngine.start(); isRunning = true
+        } catch {
+            node.removeTap(onBus: 0); streamAnalyzer = nil
+        }
     }
 
     func stop() {
         guard isRunning else { return }
         isRunning = false
-        audioEngine.stop()
-        audioEngine.inputNode.removeTap(onBus: 0)
-        // Drain analysis queue so no pending analyze() is using the analyzer
-        analysisQueue.sync {}
-        streamAnalyzer = nil
-        currentSpeechConfidence = 0
-        currentVolumeLevel = 0
+        teardown()
     }
 }
 
 extension SoundDetector: SNResultsObserving {
     func request(_ req: SNRequest, didProduce result: SNResult) {
-        guard let r = result as? SNClassificationResult else { return }
+        guard isRunning, let r = result as? SNClassificationResult else { return }
         let sp = r.classifications.filter { speechIds.contains($0.identifier) }
         let top = sp.max(by: { $0.confidence < $1.confidence })
         currentSpeechConfidence = Float(top?.confidence ?? 0)

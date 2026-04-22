@@ -8,7 +8,7 @@ swift build -c release 2>&1
 APP_VERSION=$(grep -m1 'let kAppVersion' ImHear/main.swift | sed 's/.*"\(.*\)".*/\1/')
 echo "📌 Version: $APP_VERSION"
 
-APP_DIR="/Applications/ImHear.app"
+APP_DIR="$HOME/Applications/ImHear.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
