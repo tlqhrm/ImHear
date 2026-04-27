@@ -5,7 +5,7 @@ import CoreMedia
 import CoreAudio
 import ServiceManagement
 
-let kAppVersion = "1.0.5"
+let kAppVersion = "1.0.7"
 let kGitHubRepo = "tlqhrm/ImHear"
 
 // ═══════════════════════════════════════════════════════════
@@ -526,19 +526,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     private func handleDeviceChange() {
-        // Debounce: CoreAudio often fires multiple events per single device change
+        // Debounce: CoreAudio often fires multiple events per single device change.
+        // AVAudioEngine handles restart internally via AVAudioEngineConfigurationChange
+        // notification — we only refresh the popover's mic list here.
         deviceChangeWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            let gain = self.soundDetector.micGain
-            self.soundDetector.stop()
-            self.soundDetector.micGain = gain
-            if self.isEnabled { self.soundDetector.start() }
-            self.popoverVC?.reloadMicList()
+            self?.popoverVC?.reloadMicList()
         }
         deviceChangeWork = work
-        // Wait 0.8s for hardware to settle before restarting
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
     }
 
     func setupStatusBar() {
@@ -1012,13 +1008,9 @@ class SettingsVC: NSViewController {
 
     @objc func micPick(_ s: NSPopUpButton) {
         guard let uid = s.selectedItem?.representedObject as? String else { return }
+        // Changing the system default input triggers AVAudioEngineConfigurationChange,
+        // which our SoundDetector handles via debounced restart. No manual stop/start here.
         setDefaultInputDevice(uid: uid)
-        let gain = app.soundDetector.micGain
-        app.soundDetector.stop()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            self?.app.soundDetector.micGain = gain
-            self?.app.soundDetector.start()
-        }
     }
 
     func populateMicList() {
@@ -1120,10 +1112,11 @@ class SoundDetector: NSObject {
         set { lock.lock(); _vl = newValue; lock.unlock() }
     }
 
-    private var audioEngine = AVAudioEngine()
+    private let audioEngine = AVAudioEngine()
     private var streamAnalyzer: SNAudioStreamAnalyzer?
     private let analysisQueue = DispatchQueue(label: "com.imhear.analysis")
     private(set) var isRunning = false
+    private var tapInstalled = false
 
     private let speechIds: Set<String> = [
         "speech","shout","yell","whispering","laughter",
@@ -1135,20 +1128,51 @@ class SoundDetector: NSObject {
         "narration":"Narration","babble":"Babble"
     ]
 
-    private func teardown() {
-        audioEngine.stop()
+    override init() {
+        super.init()
+        // Listen for AVAudioEngine config changes (device plug/unplug/format change)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleConfigurationChange(_:)),
+            name: .AVAudioEngineConfigurationChange,
+            object: audioEngine)
+    }
+
+    private var restartWork: DispatchWorkItem?
+
+    @objc private func handleConfigurationChange(_ n: Notification) {
+        // AVAudioEngine has internally rebuilt IO unit; restart our pipeline.
+        // Debounce to coalesce multiple notifications from a single device change.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.scheduleRestart()
+        }
+    }
+
+    func scheduleRestart() {
+        restartWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.isRunning else { return }
+            self.stop()
+            self.start()
+        }
+        restartWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: work)
+    }
+
+    private func teardownTap() {
+        // removeTap is a no-op if no tap is installed — always call to stay in sync
+        // with AVAudioEngine's internal state (it can be rebuilt across device changes)
         audioEngine.inputNode.removeTap(onBus: 0)
-        let analyzer = streamAnalyzer
-        streamAnalyzer = nil
-        analysisQueue.async { _ = analyzer }
-        currentSpeechConfidence = 0
-        currentVolumeLevel = 0
+        tapInstalled = false
     }
 
     func start() {
-        if isRunning { teardown() }
-        isRunning = false
-        audioEngine = AVAudioEngine()
+        guard !isRunning else { return }
+        // Reset any prior state on the reused engine
+        if audioEngine.isRunning { audioEngine.stop() }
+        teardownTap()
+
         let node = audioEngine.inputNode
         let fmt = node.inputFormat(forBus: 0)
         guard fmt.sampleRate > 0, fmt.channelCount > 0 else { return }
@@ -1172,17 +1196,27 @@ class SoundDetector: NSObject {
                 self?.streamAnalyzer?.analyze(buf, atAudioFramePosition: time.sampleTime)
             }
         }
+        tapInstalled = true
+
         do {
-            try audioEngine.start(); isRunning = true
+            try audioEngine.start()
+            isRunning = true
         } catch {
-            node.removeTap(onBus: 0); streamAnalyzer = nil
+            teardownTap()
+            streamAnalyzer = nil
         }
     }
 
     func stop() {
         guard isRunning else { return }
         isRunning = false
-        teardown()
+        if audioEngine.isRunning { audioEngine.stop() }
+        teardownTap()
+        let analyzer = streamAnalyzer
+        streamAnalyzer = nil
+        analysisQueue.async { _ = analyzer }
+        currentSpeechConfidence = 0
+        currentVolumeLevel = 0
     }
 }
 
